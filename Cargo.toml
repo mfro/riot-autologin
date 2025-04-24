@@ -1,0 +1,17 @@
+[package]
+name = "autologin-pure-rust"
+version = "0.1.0"
+authors = ["Max Froehlich <max@mfro.me>"]
+edition = "2018"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
+codegen-units = 1
+panic = "abort"
+
+[dependencies]
+fslock = "0.2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
