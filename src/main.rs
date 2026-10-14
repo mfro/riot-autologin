@@ -10,10 +10,41 @@ use std::{
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(debug_assertions))]
+fn log_to_file(str: &str) {
+    use std::{fs::File, io::Write, path::Path};
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let mut file = File::options()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(root.join("log.txt"))
+        .unwrap();
+
+    file.write_all(str.as_bytes()).unwrap();
+    file.write_all(b"\n").unwrap();
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! log {
+    ($expression:literal $(, $arg:expr)*) => {
+        crate::log_to_file(&format!($expression $(, $arg )*))
+    };
+}
+
+#[cfg(debug_assertions)]
+macro_rules! log {
+    ($expression:literal $(, $arg:expr)*) => {
+        println!($expression $(, $arg )*)
+    };
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct RiotGamesPrivateSettings {
     #[serde(rename = "riot-login")]
-    riot_login: RiotLogin,
+    riot_login: Option<RiotLogin>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -60,11 +91,11 @@ fn is_data_directory_active(data_directory: impl AsRef<Path>) -> Result<bool> {
     File::open(settings_path)?.read_to_end(&mut settings_bytes)?;
 
     let settings: RiotGamesPrivateSettings = serde_yaml::from_slice(&settings_bytes)?;
-    Ok(settings.riot_login.persist.is_some())
+    Ok(settings.riot_login.is_some_and(|r| r.persist.is_some()))
 }
 
 fn run(client: &RiotClient, path: impl AsRef<Path>) -> Result<()> {
-    println!("launch with {:?}", path.as_ref());
+    log!("launch with {:?}", path.as_ref());
     let lock_file = client.lock_file();
 
     let mut lock = LockFile::open(&lock_file)?;
@@ -86,10 +117,10 @@ fn run(client: &RiotClient, path: impl AsRef<Path>) -> Result<()> {
     lock.unlock()?;
 
     let mut child = client.launch()?;
-    println!("{:?}", child.id());
+    log!("{:?}", child.id());
 
     let status = child.wait()?;
-    println!("{:?}", status);
+    log!("{:?}", status);
 
     fs::rename(&client.data_directory, path.as_ref())?;
 
@@ -108,7 +139,7 @@ fn main() -> std::result::Result<(), ()> {
     let arg = std::env::args().nth(1);
     match arg {
         None => {
-            println!("invalid account");
+            log!("invalid account");
             return Err(());
         }
 
@@ -116,7 +147,7 @@ fn main() -> std::result::Result<(), ()> {
             let source_path = client.data_directory.with_extension(source_name);
 
             if let Err(e) = run(&client, source_path) {
-                println!("{:?}", e);
+                log!("{:?}", e);
                 return Err(());
             }
         }
